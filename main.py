@@ -1,4 +1,6 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from zhipuai import ZhipuAI
 import os
@@ -17,6 +19,8 @@ def chat(request: ChatRequest):
     )
     return {"jawaban": response.choices[0].message.content}
 
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 @app.get("/")
 def root():
-    return {"status": "GLM API aktif"}
+    return FileResponse("static/index.html")
