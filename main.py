@@ -5,18 +5,16 @@ from pydantic import BaseModel
 import os
 import sqlite3
 import httpx
+import time
 
-# 1. Inisialisasi app DULU
 app = FastAPI()
 
-# 2. Baru variabel Cloudflare
 CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
 CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
 CLOUDFLARE_MODEL = "@cf/zai-org/glm-5.2"
 
 DB_PATH = "chat_history.db"
 
-# 3. Fungsi database
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -62,7 +60,7 @@ def delete_history(session_id: str):
     conn.commit()
     conn.close()
 
-# 4. Models
+
 class ChatRequest(BaseModel):
     pesan: str
     session_id: str = "default"
@@ -70,7 +68,7 @@ class ChatRequest(BaseModel):
 class ResetRequest(BaseModel):
     session_id: str = "default"
 
-# 5. Baru endpoint - @app sudah ada di atas
+
 @app.post("/chat")
 def chat(request: ChatRequest):
     try:
@@ -87,20 +85,34 @@ def chat(request: ChatRequest):
 
         payload = {"messages": history}
 
-        response = httpx.post(url, headers=headers, json=payload, timeout=30)
-        data = response.json()
+        for attempt in range(3):
+            response = httpx.post(url, headers=headers, json=payload, timeout=30)
+            data = response.json()
 
-        return {"jawaban": f"DEBUG RESPONSE: {data}"}
+            if data.get("success") and data.get("result"):
+                jawaban = data["result"]["response"]
+                save_message(request.session_id, "assistant", jawaban)
+                return {"jawaban": jawaban}
+
+            if any(e.get("code") == 3040 for e in data.get("errors", [])):
+                if attempt < 2:
+                    time.sleep(2)
+                    continue
+                else:
+                    return {"jawaban": "Server AI sedang sibuk, coba lagi dalam beberapa detik ya."}
+
+            return {"jawaban": f"Error dari Cloudflare: {data.get('errors')}"}
 
     except Exception as e:
         return {"jawaban": f"DEBUG ERROR: {str(e)}"}
+
 
 @app.post("/reset")
 def reset(request: ResetRequest):
     delete_history(request.session_id)
     return {"status": "History berhasil direset"}
 
-# 6. Static files paling bawah
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
