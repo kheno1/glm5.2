@@ -3,3 +3,6 @@ uvicorn
 zhipuai
 aiofiles
 pydantic
+sniffio
+anyio
+httpx
