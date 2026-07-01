@@ -33,7 +33,6 @@
             background: #4f46e5;
             color: white;
             padding: 20px;
-            text-align: center;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -177,6 +176,13 @@
     </div>
 
     <script>
+        // Buat session_id unik per browser tab
+        let sessionId = localStorage.getItem("glm_session_id");
+        if (!sessionId) {
+            sessionId = "session_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem("glm_session_id", sessionId);
+        }
+
         async function kirim() {
             const input = document.getElementById("inputPesan");
             const chatBox = document.getElementById("chatBox");
@@ -205,7 +211,10 @@
                 const res = await fetch("/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ pesan: pesan })
+                    body: JSON.stringify({
+                        pesan: pesan,
+                        session_id: sessionId
+                    })
                 });
 
                 const data = await res.json();
@@ -231,7 +240,11 @@
         async function resetChat() {
             const chatBox = document.getElementById("chatBox");
 
-            await fetch("/reset", { method: "POST" });
+            await fetch("/reset", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ session_id: sessionId })
+            });
 
             chatBox.innerHTML = "";
 
