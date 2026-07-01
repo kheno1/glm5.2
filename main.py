@@ -2,16 +2,18 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from zhipuai import ZhipuAI
 import os
 import sqlite3
+import httpx
 
 app = FastAPI()
-client = ZhipuAI(api_key=os.environ.get("ZHIPU_API_KEY"))
+
+CLOUDFLARE_ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID")
+CLOUDFLARE_API_TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN")
+CLOUDFLARE_MODEL = "@cf/zhipuai/glm-5.2"
 
 DB_PATH = "chat_history.db"
 
-# Inisialisasi database
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -68,25 +70,32 @@ class ResetRequest(BaseModel):
 
 @app.post("/chat")
 def chat(request: ChatRequest):
-    # Ambil history dari database
-    history = get_history(request.session_id)
+    try:
+        history = get_history(request.session_id)
+        history.append({"role": "user", "content": request.pesan})
+        save_message(request.session_id, "user", request.pesan)
 
-    # Tambahkan pesan user ke history
-    history.append({"role": "user", "content": request.pesan})
-    save_message(request.session_id, "user", request.pesan)
+        url = f"https://api.cloudflare.com/client/v4/accounts/{CLOUDFLARE_ACCOUNT_ID}/ai/run/{CLOUDFLARE_MODEL}"
 
-    # Kirim ke GLM
-    response = client.chat.completions.create(
-        model="glm-5.2",
-        messages=history
-    )
+        headers = {
+            "Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}",
+            "Content-Type": "application/json"
+        }
 
-    jawaban = response.choices[0].message.content
+        payload = {
+            "messages": history
+        }
 
-    # Simpan jawaban GLM ke database
-    save_message(request.session_id, "assistant", jawaban)
+        response = httpx.post(url, headers=headers, json=payload, timeout=30)
+        data = response.json()
 
-    return {"jawaban": jawaban}
+        jawaban = data["result"]["response"]
+
+        save_message(request.session_id, "assistant", jawaban)
+        return {"jawaban": jawaban}
+
+    except Exception as e:
+        return {"jawaban": f"DEBUG ERROR: {str(e)}"}
 
 
 @app.post("/reset")
@@ -98,7 +107,5 @@ def reset(request: ResetRequest):
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
-
-
 def root():
     return FileResponse("static/index.html")
