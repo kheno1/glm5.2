@@ -90,7 +90,17 @@ def chat(request: ChatRequest):
             data = response.json()
 
             if data.get("success") and data.get("result"):
-                return {"jawaban": f"DEBUG RESULT: {data.get('result')}"}
+                result = data["result"]
+
+                # Format OpenAI-style (choices)
+                if "choices" in result and len(result["choices"]) > 0:
+                    jawaban = result["choices"][0]["message"]["content"]
+                # Format Cloudflare biasa (response)
+                elif "response" in result:
+                    jawaban = result["response"]
+                else:
+                    return {"jawaban": f"Format response tidak dikenali: {result}"}
+
                 save_message(request.session_id, "assistant", jawaban)
                 return {"jawaban": jawaban}
 
