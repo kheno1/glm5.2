@@ -98,13 +98,7 @@ def reset(request: ResetRequest):
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
-@app.get("/models")
-def list_models():
-    try:
-        models = client.models.list()
-        return {"models": [m.id for m in models.data]}
-    except Exception as e:
-        return {"error": str(e)}
+
 
 def root():
     return FileResponse("static/index.html")
