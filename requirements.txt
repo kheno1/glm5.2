@@ -1,6 +1,5 @@
 fastapi
 uvicorn
-zhipuai
 aiofiles
 pydantic
 sniffio
