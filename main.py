@@ -90,7 +90,7 @@ def chat(request: ChatRequest):
             data = response.json()
 
             if data.get("success") and data.get("result"):
-                jawaban = data["result"]["response"]
+                return {"jawaban": f"DEBUG RESULT: {data.get('result')}"}
                 save_message(request.session_id, "assistant", jawaban)
                 return {"jawaban": jawaban}
 
