@@ -15,6 +15,11 @@ CLOUDFLARE_MODEL = "@cf/zai-org/glm-5.2"
 
 DB_PATH = "chat_history.db"
 
+SYSTEM_PROMPT = {
+    "role": "system",
+    "content": "Kamu adalah asisten AI yang ramah dan helpful. Jawab pertanyaan pengguna dengan jelas dan informatif dalam bahasa Indonesia."
+}
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -83,35 +88,42 @@ def chat(request: ChatRequest):
             "Content-Type": "application/json"
         }
 
-        payload = {"messages": history}
+        messages = [SYSTEM_PROMPT] + history
+        payload = {"messages": messages}
 
         for attempt in range(3):
-            response = httpx.post(url, headers=headers, json=payload, timeout=30)
-            data = response.json()
+            try:
+                response = httpx.post(url, headers=headers, json=payload, timeout=60)
+                data = response.json()
 
-            if data.get("success") and data.get("result"):
-                result = data["result"]
+                if data.get("success") and data.get("result"):
+                    result = data["result"]
 
-                # Format OpenAI-style (choices)
-                if "choices" in result and len(result["choices"]) > 0:
-                    jawaban = result["choices"][0]["message"]["content"]
-                # Format Cloudflare biasa (response)
-                elif "response" in result:
-                    jawaban = result["response"]
-                else:
-                    return {"jawaban": f"Format response tidak dikenali: {result}"}
+                    if "choices" in result and len(result["choices"]) > 0:
+                        jawaban = result["choices"][0]["message"]["content"]
+                    elif "response" in result:
+                        jawaban = result["response"]
+                    else:
+                        return {"jawaban": f"Format response tidak dikenali: {result}"}
 
-                save_message(request.session_id, "assistant", jawaban)
-                return {"jawaban": jawaban}
+                    save_message(request.session_id, "assistant", jawaban)
+                    return {"jawaban": jawaban}
 
-            if any(e.get("code") == 3040 for e in data.get("errors", [])):
+                if any(e.get("code") == 3040 for e in data.get("errors", [])):
+                    if attempt < 2:
+                        time.sleep(3)
+                        continue
+                    else:
+                        return {"jawaban": "Server AI sedang sibuk, coba lagi dalam beberapa detik ya."}
+
+                return {"jawaban": f"Error dari Cloudflare: {data.get('errors')}"}
+
+            except httpx.TimeoutException:
                 if attempt < 2:
                     time.sleep(2)
                     continue
                 else:
-                    return {"jawaban": "Server AI sedang sibuk, coba lagi dalam beberapa detik ya."}
-
-            return {"jawaban": f"Error dari Cloudflare: {data.get('errors')}"}
+                    return {"jawaban": "Koneksi ke server AI timeout, coba kirim pesan lagi ya."}
 
     except Exception as e:
         return {"jawaban": f"DEBUG ERROR: {str(e)}"}
