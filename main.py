@@ -77,7 +77,7 @@ def chat(request: ChatRequest):
 
     # Kirim ke GLM
     response = client.chat.completions.create(
-        model="glm-4",
+        model="glm-5.2",
         messages=history
     )
 
